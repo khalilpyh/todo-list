@@ -1,5 +1,5 @@
-# todo-list - v1
-Prototype 1 of A TODO List Web App
+# todo-list 
+A TODO List Web App. 
 
 # Tools
-HTML, CSS, Express.js, EJS
+HTML, CSS, Express.js, EJS, MongoDB
