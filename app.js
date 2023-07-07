@@ -2,6 +2,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const date = require(__dirname + "/date.js");
 const mongoose = require("mongoose");
+const _ = require("lodash");
 
 const app = express();
 
@@ -29,20 +30,30 @@ const Item = mongoose.model("Item", itemsSchema);
 
 //supply some sample items as default data
 const item1 = new Item({
-  name: "Buy Food",
+  name: "Welcome to use the ToDoList.",
 });
 const item2 = new Item({
-  name: "Cook Food",
+  name: "Click + button to add a new item.",
 });
 const item3 = new Item({
-  name: "Eat Food",
+  name: "Create your custom list.",
+});
+const item4 = new Item({
+  name: "Add a list name to the url after /",
+});
+const defaultItems = [item1, item2, item3, item4];
+
+//create custom list schema
+const listSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+  },
+  items: [itemsSchema],
 });
 
-const defaultItems = [item1, item2, item3];
-
-// //declare a list to hold new items
-// let items = ["Buy Food", "Cook Food", "Eat Food"]; //fill with sample items
-let workItems = [];
+//create custom list model
+const List = mongoose.model("List", listSchema);
 
 //Landing Page - Get
 app.get("/", function (req, res) {
@@ -61,6 +72,7 @@ app.get("/", function (req, res) {
           .catch((err) => {
             console.log(err);
           });
+
         res.redirect("/");
       } else {
         res.render("list", { listTitle: day, newListItems: foundItems });
@@ -69,44 +81,111 @@ app.get("/", function (req, res) {
     .catch((err) => console.log(err));
 });
 
-//Landing Page - Post
+//Landing Page - Post (Add items)
 app.post("/", function (req, res) {
   //retrieve user input item name
   let itemName = req.body.newItem;
+  //retrieve list title (default list/custom list)
+  let listName = req.body.listTitleButton;
 
-  //add item tp the database base on differenct page button post
-  if (req.body.list === "Work") {
-    workItems.push(newItem);
-    res.redirect("/work");
-  } else {
-    //create a new item object and save to database
-    const newItem = new Item({
-      name: itemName,
-    });
+  //create a new item object and save to database
+  const newItem = new Item({
+    name: itemName,
+  });
 
-    newItem.save()
+  //get today's date that matches the default list title
+  const defaultTitle = date.getDate().split(",")[0] + ",";
+
+  //add item to the database base on different page button post
+  if (listName == defaultTitle) {
+    newItem
+      .save()
       .then(() => {
         console.log("Successfully added the new item.");
       })
       .catch((err) => {
         console.log(err);
       });
+
     res.redirect("/");
+  } else {
+    List.findOne({ name: listName })
+      .then((foundList) => {
+        foundList.items.push(newItem);
+        foundList.save();
+        res.redirect("/" + foundList.name);
+      })
+      .catch((err) => {
+        console.log(err);
+      });
   }
 });
 
-//Work Page - Get
-app.get("/work", function (req, res) {
-  res.render("list", { listTitle: "Work List", newListItems: workItems });
+//Landing Page - Post (Delete items)
+app.post("/delete", function (req, res) {
+  //get the id of the item that is checked
+  const checkedItemID = req.body.itemCheckbox;
+  //retrieve list title (default list/custom list)
+  let listName = req.body.listTitleHidden;
+
+  console.log(listName);
+
+  //check for which list to delete item
+  if (listName == date.getDate()) {
+    //delete the item from default list
+    Item.findByIdAndRemove(checkedItemID)
+      .then(() => {
+        console.log("Successfully deleted the checked item.");
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+
+    res.redirect("/");
+  } else {
+    //delete item from custom list
+    List.findOneAndUpdate(
+      { name: listName },
+      { $pull: { items: { _id: checkedItemID } } } //find the item in items array that matches the id and delete it
+    )
+      .then(() => {
+        console.log("Successfully deleted the checked item.");
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+    res.redirect("/" + listName);
+  }
 });
 
-//Work Page - Post
-app.post("/work", function (req, res) {
-  //retrieve user input item and add to item list
-  let workItem = req.body.newItem;
-  workItems.push(newItem);
+//Custom Page - Get
+app.get("/:customListName", function (req, res) {
+  //get the route param
+  const customListName = _.capitalize(req.params.customListName); //Converts the first character of string to upper case and the remaining to lower case.
 
-  res.redirect("/work");
+  //check if that customList already exists
+  List.findOne({ name: customListName })
+    .then((foundList) => {
+      if (!foundList) {
+        //create the new list if dose not exist
+        const list = new List({
+          name: customListName,
+          items: defaultItems,
+        });
+
+        list.save();
+        res.redirect("/" + customListName);
+      } else {
+        //show existing list
+        res.render("list", {
+          listTitle: foundList.name,
+          newListItems: foundList.items,
+        });
+      }
+    })
+    .catch((err) => {
+      console.log(err);
+    });
 });
 
 //About Page - Get
